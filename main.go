@@ -57,7 +57,9 @@ func serve(conn net.Conn) {
     strings.NewReader(dat404).WriteTo(conn)
     return
   }
-  s := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Length: %d\r\nContent-Type: text/html;charset=utf-8\r\nConnection: close\r\n\r\n", len(data))
+  m := mime(path)
+  fmt.Println(m)
+  s := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Length: %d\r\nContent-Type: %s\r\nConnection: close\r\n\r\n", len(data), m)
   if _, err := strings.NewReader(s).WriteTo(conn); err == nil {
     conn.Write(data)
   }
@@ -160,14 +162,11 @@ func mime(path string) string {
 
 func ext2mime(ext string) string {
   switch ext {
-  case "html":
-  case "htm":
+  case "html", "htm":
     return "text/html"
-  case "txt":
-  case "log":
+  case "txt", "log":
     return "text/plain"
-  case "jpg":
-  case "jpeg":
+  case "jpg", "jpeg":
     return "image/jpeg"
   case "png":
     return "image/png"

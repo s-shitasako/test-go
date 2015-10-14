@@ -129,6 +129,10 @@ func loadFileData(name string) (ret []byte) {
   if err != nil {
     return
   }
+  defer func(){
+    f.Close()
+  }()
+
   var l int64
   if info, err := f.Stat(); err != nil {
     return

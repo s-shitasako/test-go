@@ -13,8 +13,16 @@ var srvRoot string = "."
 
 func main() {
   port, root := loadArgs(os.Args)
-  fmt.Printf("Listen port:%d, serve directory: %s\n", port, root)
+  if port == 0 {
+    return
+  }
+  fmt.Printf("Port:%d, serve dir: %s\n", port, root)
   srvRoot = root
+  c := make([]chan int, 5)
+  for i, l := 0, len(c); i < l; i++ {
+    c[i] = make(chan int)
+    go serve(c[i], nil)
+  }
 
   ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
   if err != nil {
@@ -26,17 +34,44 @@ func main() {
         fmt.Println("Error:", err)
         os.Exit(1)
       }
-      go serve(conn)
+      if check(c, conn, func(c chan int, _conn net.Conn){
+        go serve(c, _conn)
+      }) {
+        skip(conn)
+      }
     }
   }
 }
 
-func serve(conn net.Conn) {
-  defer func(){
-    if err := conn.Close(); err != nil {
-      fmt.Println("conn closed with err: ", err)
+func check(c []chan int, conn net.Conn, cb func(c chan int, conn net.Conn)) bool {
+  for i, l := 0, len(c); i < l; i++ {
+    select {
+    case <-c[i]:
+      fmt.Printf("chan #%d vacant.\n", i)
+      cb(c[i], conn)
+      return false
+    default:
     }
+  }
+  return true
+}
+
+func skip(conn net.Conn){
+  dat503 := "HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/html\r\nContent-Length: 12\r\nConnection: close\r\n\r\n<h1>503</h1>"
+  strings.NewReader(dat503).WriteTo(conn)
+  conn.Close()
+}
+
+func serve(ch chan int, conn net.Conn) {
+  defer func(){
+    if conn != nil {
+      if err := conn.Close(); err != nil {
+        fmt.Println("conn closed with err: ", err)
+      }
+    }
+    ch <- 1
   }()
+  if conn == nil { return }
 
   buf := make([]byte, 65536)
   l, err := conn.Read(buf)
@@ -84,8 +119,9 @@ func loadArgs(args []string) (int, string) {
       root = root[:len(root)-1]
     }
   default:
-    fmt.Println("usage: test-go port [ root-dir ]")
+    fmt.Println("usage: test-go [[ port ] root-dir ]")
     fmt.Println("e.g. test-go 8080 ~/root")
+    fmt.Println("e.g. test-go ~/root")
   }
   return port, root
 }
